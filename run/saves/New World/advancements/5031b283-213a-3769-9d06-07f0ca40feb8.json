@@ -1,0 +1,22 @@
+{
+  "butterfly_api:root": {
+    "criteria": {
+      "root": "2026-05-19 17:17:04 -0800"
+    },
+    "done": true
+  },
+  "minecraft:recipes/decorations/crafting_table": {
+    "criteria": {
+      "unlock_right_away": "2026-05-19 17:17:04 -0800"
+    },
+    "done": true
+  },
+  "minecraft:adventure/adventuring_time": {
+    "criteria": {
+      "minecraft:windswept_gravelly_hills": "2026-05-19 17:21:16 -0800",
+      "minecraft:plains": "2026-05-19 17:17:04 -0800"
+    },
+    "done": false
+  },
+  "DataVersion": 3465
+}

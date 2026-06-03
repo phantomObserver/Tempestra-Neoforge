@@ -1,0 +1,14 @@
+{
+  "required": true,
+  "package": "moth.tempestra.mixin",
+  "compatibilityLevel": "JAVA_17",
+  "mixins": [
+    "EntityLightningDamageMixin",
+    "LightningEntityChannelingMixin",
+    "ServerWorldAccessor",
+    "ServerWorldLightningFrequencyMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

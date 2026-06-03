@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "id": "tempestra",
+  "version": "1.0.0",
+  "name": "Tempestra",
+  "description": "A lightning and thunderstorm visual overhaul focused on dramatic custom lightning.",
+  "authors": [
+    "Moth"
+  ],
+  "license": "CC-BY-SA 4.0",
+  "environment": "*",
+  "depends": {
+    "fabricloader": ">=0.16.10",
+    "minecraft": "~1.20.1",
+    "java": ">=17",
+    "fabric-api": ">=0.92.6+1.20.1",
+    "butterfly_api": ">=1.0.0",
+    "geckolib": ">=4.4.9"
+  },
+  "entrypoints": {
+    "main": [
+      "moth.tempestra.TempestraMod"
+    ],
+    "client": [
+      "moth.tempestra.client.TempestraClient"
+    ]
+  },
+  "mixins": [
+    "tempestra.mixins.json"
+  ],
+  "custom": {
+    "modrinth": {
+      "project_id": "AxDItXlD"
+    },
+    "loom:mods": [
+      {
+        "name": "Tempestra",
+        "value": "tempestra"
+      }
+    ]
+  }
+}
