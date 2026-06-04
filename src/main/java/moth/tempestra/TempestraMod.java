@@ -14,7 +14,7 @@ public class TempestraMod implements ModInitializer {
 
     @Override
     public void onInitialize() {
-        LOGGER.info("[Tempestra] Initializing shared lightning systems...");
+        LOGGER.info("[Tempestra] Initializing Tempestra!");
         TempestraServerGameplay.init();
     }
 

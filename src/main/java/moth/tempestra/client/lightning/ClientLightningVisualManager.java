@@ -87,28 +87,70 @@ public final class ClientLightningVisualManager {
                     continue;
                 }
 
-                float secondaryFade = path.type() == LightningPathType.MAIN
-                        ? 1.0F
-                        : secondaryFade(path.type(), segment.localEndProgress());
-                float contactFade = path.type() == LightningPathType.MAIN
-                        ? 1.0F
-                        : Math.max(secondaryFadeFloor(path.type()) * 0.72F, 1.0F - smoothstep(0.74F, 0.96F, segment.endProgress()));
-                float alphaScale = path.alphaScale() * segment.energy() * segmentFlicker * secondaryFade * contactFade * lifetimeFade * strikeFlash;
-                if (alphaScale <= 0.01F) {
+                float baseAlphaScale = path.alphaScale() * segment.energy() * segmentFlicker * lifetimeFade * strikeFlash;
+                float startAlphaScale = baseAlphaScale * pathFade(path.type(), segment.localStartProgress(), segment.startProgress());
+                float endAlphaScale = baseAlphaScale * pathFade(path.type(), segment.localEndProgress(), segment.endProgress());
+                if (startAlphaScale <= 0.01F && endAlphaScale <= 0.01F) {
                     continue;
                 }
 
                 float distanceReadability = distanceReadability(cameraPos, segment);
                 if (path.type() != LightningPathType.MAIN) {
-                    alphaScale *= 1.0F + distanceReadability * TempestraLightningVisuals.DISTANT_SECONDARY_ALPHA_BOOST;
+                    float readabilityBoost = 1.0F + distanceReadability * TempestraLightningVisuals.DISTANT_SECONDARY_ALPHA_BOOST;
+                    startAlphaScale *= readabilityBoost;
+                    endAlphaScale *= readabilityBoost;
                 }
                 float widthJitter = 0.84F + flicker(segment.flickerSeed() ^ 0x7A1D2E6B62D19F5AL, data.renderAge(tickDelta), 1.0F) * 0.28F;
                 float radiusBoost = 1.0F + distanceReadability * TempestraLightningVisuals.DISTANT_RADIUS_BOOST;
                 float widthScale = path.widthScale() * segment.widthScale() * widthJitter * (0.8F + data.intensity() * 0.22F) * radiusBoost;
-                renderSegmentPass(positionMatrix, consumer, segment, TempestraLightningVisuals.MAIN_OUTER_RADIUS * widthScale, colorForOuter(path.type()), Math.round(108.0F * alphaScale));
-                renderSegmentPass(positionMatrix, consumer, segment, TempestraLightningVisuals.MAIN_INNER_RADIUS * widthScale, TempestraLightningVisuals.INNER_COLOR, Math.round(190.0F * alphaScale));
+                float startRadiusScale = pathRadiusScale(path.type(), segment.localStartProgress(), segment.startProgress());
+                float endRadiusScale = pathRadiusScale(path.type(), segment.localEndProgress(), segment.endProgress());
+                float flashBloom = path.type() == LightningPathType.MAIN
+                        ? 1.0F - smoothstep(0.0F, 3.8F, data.renderAge(tickDelta))
+                        : 0.0F;
+                if (flashBloom > 0.01F) {
+                    renderSegmentPass(
+                            positionMatrix,
+                            consumer,
+                            segment,
+                            TempestraLightningVisuals.MAIN_OUTER_RADIUS * widthScale * startRadiusScale * 1.75F,
+                            TempestraLightningVisuals.MAIN_OUTER_RADIUS * widthScale * endRadiusScale * 1.48F,
+                            colorForOuter(path.type()),
+                            Math.round(38.0F * startAlphaScale * flashBloom),
+                            Math.round(30.0F * endAlphaScale * flashBloom)
+                    );
+                }
+                renderSegmentPass(
+                        positionMatrix,
+                        consumer,
+                        segment,
+                        TempestraLightningVisuals.MAIN_OUTER_RADIUS * widthScale * startRadiusScale,
+                        TempestraLightningVisuals.MAIN_OUTER_RADIUS * widthScale * endRadiusScale,
+                        colorForOuter(path.type()),
+                        Math.round(108.0F * startAlphaScale),
+                        Math.round(108.0F * endAlphaScale)
+                );
+                renderSegmentPass(
+                        positionMatrix,
+                        consumer,
+                        segment,
+                        TempestraLightningVisuals.MAIN_INNER_RADIUS * widthScale * startRadiusScale,
+                        TempestraLightningVisuals.MAIN_INNER_RADIUS * widthScale * endRadiusScale,
+                        TempestraLightningVisuals.INNER_COLOR,
+                        Math.round(190.0F * startAlphaScale),
+                        Math.round(190.0F * endAlphaScale)
+                );
                 if (path.type() == LightningPathType.MAIN || segmentFlicker > 0.46F) {
-                    renderSegmentPass(positionMatrix, consumer, segment, TempestraLightningVisuals.MAIN_CORE_RADIUS * widthScale, TempestraLightningVisuals.CORE_COLOR, Math.round(245.0F * alphaScale));
+                    renderSegmentPass(
+                            positionMatrix,
+                            consumer,
+                            segment,
+                            TempestraLightningVisuals.MAIN_CORE_RADIUS * widthScale * startRadiusScale,
+                            TempestraLightningVisuals.MAIN_CORE_RADIUS * widthScale * endRadiusScale,
+                            TempestraLightningVisuals.CORE_COLOR,
+                            Math.round(245.0F * startAlphaScale),
+                            Math.round(245.0F * endAlphaScale)
+                    );
                 }
             }
         }
@@ -133,16 +175,20 @@ public final class ClientLightningVisualManager {
                     consumer,
                     segment,
                     TempestraLightningVisuals.MAIN_INNER_RADIUS * ray.widthScale() * (1.0F - progress * 0.45F),
+                    TempestraLightningVisuals.MAIN_INNER_RADIUS * ray.widthScale() * (0.22F + progress * 0.08F),
                     TempestraLightningVisuals.IMPACT_COLOR,
-                    Math.round(170.0F * alphaScale * rayFlicker)
+                    Math.round(188.0F * alphaScale * rayFlicker),
+                    Math.round(36.0F * alphaScale * rayFlicker)
             );
             renderSegmentPass(
                     positionMatrix,
                     consumer,
                     segment,
                     TempestraLightningVisuals.MAIN_OUTER_RADIUS * 0.42F * ray.widthScale(),
+                    TempestraLightningVisuals.MAIN_OUTER_RADIUS * 0.08F * ray.widthScale(),
                     TempestraLightningVisuals.OUTER_COLOR,
-                    Math.round(68.0F * alphaScale * rayFlicker)
+                    Math.round(76.0F * alphaScale * rayFlicker),
+                    Math.round(18.0F * alphaScale * rayFlicker)
             );
         }
     }
@@ -157,27 +203,37 @@ public final class ClientLightningVisualManager {
             Vec3d current = spark.interpolatedPosition(tickDelta);
             Vec3d tail = current.subtract(spark.velocity().multiply(1.85D));
             LightningSegment segment = new LightningSegment(tail, current, 0.0F, 0.0F, 0.0F, 1.0F, 1.0F, 1.0F, data.seed());
-            renderSegmentPass(positionMatrix, consumer, segment, spark.radius() * (1.0F - progress * 0.55F), spark.color(), Math.round(210.0F * alphaScale));
-            renderSegmentPass(positionMatrix, consumer, segment, spark.radius() * 2.2F, TempestraLightningVisuals.OUTER_COLOR, Math.round(54.0F * alphaScale));
+            float headRadius = spark.radius() * (1.0F - progress * 0.55F);
+            renderSegmentPass(positionMatrix, consumer, segment, headRadius * 0.42F, headRadius, spark.color(), Math.round(74.0F * alphaScale), Math.round(218.0F * alphaScale));
+            renderSegmentPass(positionMatrix, consumer, segment, spark.radius() * 0.82F, spark.radius() * 2.2F, TempestraLightningVisuals.OUTER_COLOR, Math.round(18.0F * alphaScale), Math.round(58.0F * alphaScale));
         }
     }
 
     private static void renderSegmentPass(Matrix4f positionMatrix, VertexConsumer consumer, LightningSegment segment, float radius, int color, int alpha) {
-        if (alpha <= 0 || radius <= 0.0F) {
+        renderSegmentPass(positionMatrix, consumer, segment, radius, color, alpha, alpha);
+    }
+
+    private static void renderSegmentPass(Matrix4f positionMatrix, VertexConsumer consumer, LightningSegment segment, float radius, int color, int startAlpha, int endAlpha) {
+        renderSegmentPass(positionMatrix, consumer, segment, radius, radius * 0.84F, color, startAlpha, endAlpha);
+    }
+
+    private static void renderSegmentPass(Matrix4f positionMatrix, VertexConsumer consumer, LightningSegment segment, float startRadius, float endRadius, int color, int startAlpha, int endAlpha) {
+        if ((startAlpha <= 0 && endAlpha <= 0) || (startRadius <= 0.0F && endRadius <= 0.0F)) {
             return;
         }
+        boolean gradientAlpha = startAlpha != endAlpha;
         emitTubeSegment(
                 positionMatrix,
                 consumer,
                 segment.start(),
                 segment.end(),
-                radius,
-                radius * 0.84F,
+                Math.max(0.0F, startRadius),
+                Math.max(0.0F, endRadius),
                 red(color),
                 green(color),
                 blue(color),
-                MathHelper.clamp(alpha, 0, 255),
-                MathHelper.clamp(Math.round(alpha * 0.88F), 0, 255),
+                MathHelper.clamp(startAlpha, 0, 255),
+                MathHelper.clamp(gradientAlpha ? endAlpha : Math.round(endAlpha * 0.88F), 0, 255),
                 TempestraLightningVisuals.TUBE_SIDES
         );
     }
@@ -268,6 +324,28 @@ public final class ClientLightningVisualManager {
 
     private static float secondaryFade(LightningPathType type, float localEndProgress) {
         return Math.max(secondaryFadeFloor(type), 1.0F - smoothstep(0.58F, 1.0F, localEndProgress));
+    }
+
+    private static float pathFade(LightningPathType type, float localProgress, float globalProgress) {
+        if (type == LightningPathType.MAIN) {
+            return 1.0F;
+        }
+
+        float secondaryFade = secondaryFade(type, localProgress);
+        float contactFade = Math.max(secondaryFadeFloor(type) * 0.72F, 1.0F - smoothstep(0.74F, 0.96F, globalProgress));
+        return secondaryFade * contactFade;
+    }
+
+    private static float pathRadiusScale(LightningPathType type, float localProgress, float globalProgress) {
+        return switch (type) {
+            case MAIN -> Math.max(
+                    0.78F,
+                    (0.86F + smoothstep(0.0F, 0.14F, globalProgress) * 0.14F)
+                            * (1.0F - smoothstep(0.84F, 1.0F, globalProgress) * 0.12F)
+            );
+            case SPLIT -> Math.max(0.48F, 1.0F - smoothstep(0.34F, 1.0F, localProgress) * 0.46F);
+            case BRANCH -> Math.max(0.30F, 1.0F - smoothstep(0.18F, 1.0F, localProgress) * 0.68F);
+        };
     }
 
     private static float secondaryFadeFloor(LightningPathType type) {

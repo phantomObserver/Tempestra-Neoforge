@@ -4,6 +4,7 @@ import moth.butterflyapi.math.Angles;
 import moth.butterflyapi.math.Basis3;
 import moth.butterflyapi.math.Scalars;
 import moth.butterflyapi.math.Vecs;
+import moth.tempestra.lightning.TempestraLightningSplits;
 import net.minecraft.client.world.ClientWorld;
 import net.minecraft.entity.LightningEntity;
 import net.minecraft.util.math.MathHelper;
@@ -24,17 +25,18 @@ public final class LightningShapeGenerator {
     public static LightningBoltVisualData generate(LightningEntity entity, ClientWorld world) {
         Vec3d contact = entity.getPos();
         long worldTime = world == null ? 0L : world.getTime();
-        long seed = seed(entity, contact, worldTime);
+        long seed = TempestraLightningSplits.seed(entity, contact, worldTime);
         Random random = new Random(seed);
         double cloudBaseY = cloudBaseY(world, contact.y);
         double verticalDistance = cloudBaseY - contact.y;
         boolean fullBolt = verticalDistance >= TempestraLightningVisuals.MIN_FULL_BOLT_VERTICAL_DISTANCE;
+        boolean allowSplits = TempestraLightningSplits.canCreateVisualSplits(entity, world);
         float intensity = MathHelper.clamp(0.62F + random.nextFloat() * 0.55F, 0.55F, 1.12F);
 
         Vec3d origin = fullBolt
                 ? chooseCloudOrigin(contact, cloudBaseY, verticalDistance, random)
                 : chooseCompactOrigin(contact, random);
-        ShapeBuild build = buildPaths(origin, contact, fullBolt, intensity, random);
+        ShapeBuild build = buildPaths(origin, contact, fullBolt, allowSplits, intensity, random, world);
         List<LightningImpactRay> impactRays = buildImpactRays(build.impactContacts(), random, fullBolt, intensity);
         List<LightningSpark> sparks = buildSparks(build.impactContacts(), build.sparkPoints(), random, fullBolt, intensity);
         int lifetime = fullBolt
@@ -56,20 +58,29 @@ public final class LightningShapeGenerator {
         );
     }
 
-    private static ShapeBuild buildPaths(Vec3d origin, Vec3d contact, boolean fullBolt, float intensity, Random random) {
+    private static ShapeBuild buildPaths(
+            Vec3d origin,
+            Vec3d contact,
+            boolean fullBolt,
+            boolean allowSplits,
+            float intensity,
+            Random random,
+            ClientWorld world
+    ) {
         double totalDistance = origin.distanceTo(contact);
         double verticalDistance = Math.max(1.0D, origin.y - contact.y);
         double horizontalDistance = Math.hypot(origin.x - contact.x, origin.z - contact.z);
         int mainSegments = mainSegmentCount(totalDistance, verticalDistance, horizontalDistance, fullBolt, random);
         List<Vec3d> mainPoints = buildMainPoints(origin, contact, mainSegments, random);
-        List<LightningPath> paths = new ArrayList<>();
-        List<LightningSegment> mainPathSegments = new ArrayList<>();
-        List<Vec3d> impactContacts = new ArrayList<>();
-        List<Vec3d> sparkPoints = new ArrayList<>(mainPoints);
+        List<LightningPath> paths = new ArrayList<>(Math.max(4, mainSegments));
+        List<LightningSegment> mainPathSegments = new ArrayList<>(mainSegments);
+        List<Vec3d> impactContacts = new ArrayList<>(2);
+        List<Vec3d> sparkPoints = new ArrayList<>(mainPoints.size() + 8);
         double averageSegmentLength = Math.max(MIN_SEGMENT_LENGTH, totalDistance / mainSegments);
         boolean connectingGroundSplitCreated = false;
 
         impactContacts.add(contact);
+        sparkPoints.addAll(mainPoints);
 
         for (int index = 0; index < mainPoints.size() - 1; index++) {
             Vec3d start = mainPoints.get(index);
@@ -78,7 +89,7 @@ public final class LightningShapeGenerator {
             float endProgress = (index + 1) / (float) mainSegments;
             mainPathSegments.add(segment(start, end, startProgress, endProgress, startProgress, endProgress, 1.0F, random));
 
-            if (!fullBolt) {
+            if (!fullBolt || !allowSplits) {
                 continue;
             }
 
@@ -92,10 +103,12 @@ public final class LightningShapeGenerator {
                             endProgress,
                             averageSegmentLength,
                             mainSegments - index,
-                            random
+                            random,
+                            world
                     );
-                    if (!groundSplit.path().segments().isEmpty()) {
-                        paths.add(groundSplit.path());
+                    LightningPath groundPath = groundSplit.path();
+                    if (!groundPath.segments().isEmpty()) {
+                        paths.add(groundPath);
                         impactContacts.add(groundSplit.contact());
                         sparkPoints.addAll(groundSplit.points());
                         connectingGroundSplitCreated = true;
@@ -136,15 +149,15 @@ public final class LightningShapeGenerator {
         }
 
         paths.add(0, new LightningPath(LightningPathType.MAIN, mainPathSegments, 1.0F, 1.0F));
-        return new ShapeBuild(paths, mainPoints, impactContacts, sparkPoints);
+        return new ShapeBuild(paths, impactContacts, sparkPoints);
     }
 
     private static List<Vec3d> buildMainPoints(Vec3d origin, Vec3d contact, int segments, Random random) {
-        List<Double> weights = new ArrayList<>(segments);
+        double[] weights = new double[segments];
         double totalWeight = 0.0D;
         for (int index = 0; index < segments; index++) {
             double weight = 0.82D + random.nextDouble() * 0.36D;
-            weights.add(weight);
+            weights[index] = weight;
             totalWeight += weight;
         }
 
@@ -159,7 +172,7 @@ public final class LightningShapeGenerator {
         double cumulative = 0.0D;
         double previousAngle = random.nextDouble(Angles.TAU);
         for (int index = 1; index < segments; index++) {
-            cumulative += weights.get(index - 1);
+            cumulative += weights[index - 1];
             double progress = cumulative / totalWeight;
             double middleStrength = Math.sin(progress * Math.PI);
             double curl = random.nextDouble(-0.85D, 0.85D);
@@ -192,7 +205,7 @@ public final class LightningShapeGenerator {
         double awayAngle = random.nextDouble(Angles.TAU);
         Vec3d away = basis.radial(awayAngle, 1.0D);
         Vec3d current = start;
-        List<LightningSegment> segments = new ArrayList<>();
+        List<LightningSegment> segments = new ArrayList<>(segmentCount);
 
         for (int index = 0; index < segmentCount; index++) {
             float localStart = index / (float) segmentCount;
@@ -225,12 +238,13 @@ public final class LightningShapeGenerator {
             float startProgress,
             double averageSegmentLength,
             int remainingMainSegments,
-            Random random
+            Random random,
+            ClientWorld world
     ) {
-        Vec3d secondaryContact = chooseSecondaryGroundContact(primaryContact, origin, parentAxis, random);
+        Vec3d secondaryContact = TempestraLightningSplits.chooseSecondaryGroundContact(primaryContact, origin, parentAxis, random, world);
         int segmentCount = connectingGroundSplitSegmentCount(start, secondaryContact, averageSegmentLength, remainingMainSegments, random);
         List<Vec3d> points = buildMainPoints(start, secondaryContact, segmentCount, random);
-        List<LightningSegment> segments = new ArrayList<>();
+        List<LightningSegment> segments = new ArrayList<>(segmentCount);
 
         for (int index = 0; index < points.size() - 1; index++) {
             Vec3d current = points.get(index);
@@ -246,21 +260,6 @@ public final class LightningShapeGenerator {
                 new LightningPath(LightningPathType.MAIN, segments, 0.94F, 0.94F),
                 points,
                 secondaryContact
-        );
-    }
-
-    private static Vec3d chooseSecondaryGroundContact(Vec3d primaryContact, Vec3d origin, Vec3d parentAxis, Random random) {
-        double angle = Math.atan2(primaryContact.z - origin.z, primaryContact.x - origin.x)
-                + random.nextDouble(-1.2D, 1.2D);
-        if (Vecs.lengthSquared(parentAxis) > 1.0E-4D && random.nextBoolean()) {
-            angle = Math.atan2(parentAxis.z, parentAxis.x) + random.nextDouble(-0.95D, 0.95D);
-        }
-
-        double distance = random.nextDouble(7.0D, 22.0D);
-        return new Vec3d(
-                primaryContact.x + Math.cos(angle) * distance,
-                primaryContact.y,
-                primaryContact.z + Math.sin(angle) * distance
         );
     }
 
@@ -286,22 +285,34 @@ public final class LightningShapeGenerator {
             float globalProgress,
             Random random
     ) {
-        int segmentCount = random.nextFloat() < 0.72F ? 2 : 3;
-        double segmentLength = Scalars.clamp(averageSegmentLength * random.nextDouble(0.56D, 0.95D), 4.0D, 14.0D);
+        float lengthScale = branchLengthScale(globalProgress);
+        int segmentCount = branchSegmentCount(lengthScale, random);
+        double segmentLength = Scalars.clamp(averageSegmentLength * lengthScale * random.nextDouble(0.62D, 1.04D), 5.0D, 19.5D);
         Vec3d down = Vecs.safeNormalize(contact.subtract(start), new Vec3d(0.0D, -1.0D, 0.0D));
         Basis3 basis = Basis3.fromForward(Vecs.safeNormalize(parentAxis, down));
         double angle = random.nextDouble(Angles.TAU);
         Vec3d side = basis.radial(angle, 1.0D);
         Vec3d current = start;
-        List<LightningSegment> segments = new ArrayList<>();
+        List<LightningSegment> segments = new ArrayList<>(segmentCount);
+        double longBranchBias = MathHelper.clamp((lengthScale - 1.18F) / 0.72F, 0.0F, 1.0F);
 
         for (int index = 0; index < segmentCount; index++) {
             float localStart = index / (float) segmentCount;
             float localEnd = (index + 1) / (float) segmentCount;
-            Vec3d direction = down.multiply(0.32D)
-                    .add(side.multiply(1.0D + localStart * 0.35D))
-                    .add(0.0D, -0.16D - random.nextDouble() * 0.12D, 0.0D);
-            direction = Vecs.safeNormalize(direction, side);
+            boolean firstSegment = index == 0;
+            double downBias = Scalars.lerp(localStart, 0.52D + longBranchBias * 0.38D, 0.36D + longBranchBias * 0.28D);
+            double sideBias = Scalars.lerp(localStart, 0.42D - longBranchBias * 0.14D, 0.98D - longBranchBias * 0.22D);
+            double verticalDrop = 0.24D + longBranchBias * 0.22D + random.nextDouble() * (0.12D + longBranchBias * 0.08D);
+            if (firstSegment) {
+                downBias += 0.48D + longBranchBias * 0.2D;
+                sideBias *= 0.42D;
+                verticalDrop += 0.34D;
+            }
+
+            Vec3d direction = down.multiply(downBias)
+                    .add(side.multiply(sideBias))
+                    .add(0.0D, -verticalDrop, 0.0D);
+            direction = Vecs.safeNormalize(direction, down.add(0.0D, -0.65D, 0.0D));
             Vec3d next = current.add(direction.multiply(segmentLength * random.nextDouble(0.72D, 1.14D)));
             double minY = contact.y + MIN_GROUND_CLEARANCE + ((origin.y - contact.y) * 0.04D);
             if (next.y < minY) {
@@ -316,6 +327,23 @@ public final class LightningShapeGenerator {
         return new LightningPath(LightningPathType.BRANCH, segments, TempestraLightningVisuals.BRANCH_WIDTH_SCALE, 0.54F);
     }
 
+    private static int branchSegmentCount(float lengthScale, Random random) {
+        float boost = MathHelper.clamp((lengthScale - 1.18F) / 0.72F, 0.0F, 1.0F);
+        float roll = random.nextFloat();
+        float twoSegmentChance = MathHelper.lerp(boost, 0.56F, 0.22F);
+        float fourSegmentChance = MathHelper.lerp(boost, 0.08F, 0.34F);
+        if (roll < twoSegmentChance) {
+            return 2;
+        }
+        return roll > 1.0F - fourSegmentChance ? 4 : 3;
+    }
+
+    private static float branchLengthScale(float globalProgress) {
+        float upperMiddleBoost = smoothstep(0.12F, 0.28F, globalProgress)
+                * (1.0F - smoothstep(0.66F, 0.90F, globalProgress));
+        return 1.18F + upperMiddleBoost * 0.72F;
+    }
+
     private static void maybeAddSplitBranches(
             List<LightningPath> paths,
             LightningPath split,
@@ -324,14 +352,19 @@ public final class LightningShapeGenerator {
             float intensity,
             Random random
     ) {
-        for (LightningSegment segment : split.segments()) {
+        List<LightningSegment> splitSegments = split.segments();
+        if (splitSegments.isEmpty()) {
+            return;
+        }
+
+        Vec3d splitOrigin = splitSegments.get(0).start();
+        for (LightningSegment segment : splitSegments) {
             float chance = TempestraLightningVisuals.SPLIT_BRANCH_CHANCE_MAX
                     * intensity
                     * (1.0F - segment.localStartProgress());
             if (random.nextFloat() >= chance) {
                 continue;
             }
-            Vec3d splitOrigin = split.segments().get(0).start();
             LightningPath branch = buildBranchPath(
                     segment.start().add(segment.end()).multiply(0.5D),
                     contact,
@@ -372,8 +405,11 @@ public final class LightningShapeGenerator {
     }
 
     private static List<LightningSpark> buildSparks(List<Vec3d> impactContacts, List<Vec3d> sparkPoints, Random random, boolean fullBolt, float intensity) {
-        List<LightningSpark> sparks = new ArrayList<>();
         int impactCount = fullBolt ? 14 + random.nextInt(9) : 7 + random.nextInt(5);
+        int atmosphericCount = fullBolt && sparkPoints.size() >= 3
+                ? Math.min(18, Math.max(6, sparkPoints.size()))
+                : 0;
+        List<LightningSpark> sparks = new ArrayList<>(impactContacts.size() * impactCount + atmosphericCount);
         for (Vec3d contact : impactContacts) {
             for (int index = 0; index < impactCount; index++) {
                 double angle = random.nextDouble(Angles.TAU);
@@ -394,7 +430,6 @@ public final class LightningShapeGenerator {
             return sparks;
         }
 
-        int atmosphericCount = Math.min(18, Math.max(6, sparkPoints.size()));
         for (int index = 0; index < atmosphericCount; index++) {
             int pointIndex = 1 + random.nextInt(sparkPoints.size() - 2);
             Vec3d base = sparkPoints.get(pointIndex);
@@ -525,16 +560,6 @@ public final class LightningShapeGenerator {
         return Math.max(TempestraLightningVisuals.FALLBACK_CLOUD_BASE_Y, contactY + TempestraLightningVisuals.COMPACT_BOLT_HEIGHT);
     }
 
-    private static long seed(LightningEntity entity, Vec3d contact, long worldTime) {
-        long seed = entity.getUuid().getMostSignificantBits() ^ Long.rotateLeft(entity.getUuid().getLeastSignificantBits(), 17);
-        seed ^= ((long) entity.getId()) * 0x9E3779B97F4A7C15L;
-        seed ^= Double.doubleToLongBits(contact.x * 31.0D);
-        seed ^= Long.rotateLeft(Double.doubleToLongBits(contact.y * 17.0D), 21);
-        seed ^= Long.rotateLeft(Double.doubleToLongBits(contact.z * 13.0D), 42);
-        seed ^= worldTime * 0xD1B54A32D192ED03L;
-        return seed;
-    }
-
     private enum HorizontalBand {
         CLOSE(0.0D, 16.0D),
         MIDDLE(16.0D, 32.0D),
@@ -560,6 +585,6 @@ public final class LightningShapeGenerator {
     private record GroundSplit(LightningPath path, List<Vec3d> points, Vec3d contact) {
     }
 
-    private record ShapeBuild(List<LightningPath> paths, List<Vec3d> mainPoints, List<Vec3d> impactContacts, List<Vec3d> sparkPoints) {
+    private record ShapeBuild(List<LightningPath> paths, List<Vec3d> impactContacts, List<Vec3d> sparkPoints) {
     }
 }
