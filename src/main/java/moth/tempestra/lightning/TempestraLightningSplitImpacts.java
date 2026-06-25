@@ -1,13 +1,13 @@
 package moth.tempestra.lightning;
 
 import moth.tempestra.mixin.LightningEntityAccessor;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.EntityType;
-import net.minecraft.entity.LightningEntity;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Box;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.LightningBolt;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.Difficulty;
 
 import java.util.List;
@@ -19,27 +19,27 @@ public final class TempestraLightningSplitImpacts {
     private TempestraLightningSplitImpacts() {
     }
 
-    public static void tryApplySecondaryImpact(LightningEntity source, ServerWorld world) {
+    public static void tryApplySecondaryImpact(LightningBolt source, ServerLevel world) {
         TempestraLightningSplits.findSecondaryImpact(source, world).ifPresent(contact -> applyImpact(world, contact));
     }
 
-    private static void applyImpact(ServerWorld world, Vec3d contact) {
-        if (!world.isChunkLoaded(BlockPos.ofFloored(contact))) {
+    private static void applyImpact(ServerLevel world, Vec3 contact) {
+        if (!world.hasChunkAt(BlockPos.containing(contact))) {
             return;
         }
 
-        LightningEntity impact = EntityType.LIGHTNING_BOLT.create(world);
+        LightningBolt impact = EntityType.LIGHTNING_BOLT.create(world);
         if (impact == null) {
             return;
         }
 
-        impact.refreshPositionAfterTeleport(contact);
+        impact.moveTo(contact.x, contact.y, contact.z, 0.0F, 0.0F);
         Difficulty difficulty = world.getDifficulty();
         if (difficulty == Difficulty.NORMAL || difficulty == Difficulty.HARD) {
             ((LightningEntityAccessor) impact).tempestra$invokeSpawnFire(4);
         }
 
-        Box damageBox = new Box(
+        AABB damageAABB = new AABB(
                 contact.x - DAMAGE_RADIUS,
                 contact.y - DAMAGE_RADIUS,
                 contact.z - DAMAGE_RADIUS,
@@ -47,9 +47,9 @@ public final class TempestraLightningSplitImpacts {
                 contact.y + DAMAGE_HEIGHT_EXTENSION + DAMAGE_RADIUS,
                 contact.z + DAMAGE_RADIUS
         );
-        List<Entity> struckEntities = world.getOtherEntities(impact, damageBox, entity -> entity.isAlive() && !(entity instanceof LightningEntity));
+        List<Entity> struckEntities = world.getEntities(impact, damageAABB, entity -> entity.isAlive() && !(entity instanceof LightningBolt));
         for (Entity entity : struckEntities) {
-            entity.onStruckByLightning(world, impact);
+            entity.thunderHit(world, impact);
         }
     }
 }

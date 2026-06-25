@@ -2,59 +2,59 @@ package moth.tempestra.mixin;
 
 import moth.tempestra.lightning.TempestraLightningEntityAccess;
 import moth.tempestra.lightning.TempestraLightningSplitImpacts;
-import net.minecraft.entity.LightningEntity;
-import net.minecraft.entity.data.DataTracker;
-import net.minecraft.entity.data.TrackedData;
-import net.minecraft.entity.data.TrackedDataHandlerRegistry;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.server.world.ServerWorld;
+import net.minecraft.world.entity.LightningBolt;
+import net.minecraft.network.syncher.SynchedEntityData;
+import net.minecraft.network.syncher.EntityDataAccessor;
+import net.minecraft.network.syncher.EntityDataSerializers;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.level.ServerLevel;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-@Mixin(LightningEntity.class)
+@Mixin(LightningBolt.class)
 public abstract class LightningEntitySplitMixin implements TempestraLightningEntityAccess {
     @Unique
-    private static final TrackedData<Boolean> TEMPESTRA_ALLOWS_SPLITTING =
-            DataTracker.registerData(LightningEntity.class, TrackedDataHandlerRegistry.BOOLEAN);
+    private static final EntityDataAccessor<Boolean> TEMPESTRA_ALLOWS_SPLITTING =
+            SynchedEntityData.defineId(LightningBolt.class, EntityDataSerializers.BOOLEAN);
 
     @Unique
     private boolean tempestra$splitImpactApplied;
 
-    @Inject(method = "initDataTracker", at = @At("TAIL"))
-    private void tempestra$trackSplitState(CallbackInfo ci) {
-        ((LightningEntity) (Object) this).getDataTracker().startTracking(TEMPESTRA_ALLOWS_SPLITTING, true);
+    @Inject(method = "defineSynchedData", at = @At("TAIL"))
+    private void tempestra$trackSplitState(SynchedEntityData.Builder builder, CallbackInfo ci) {
+        builder.define(TEMPESTRA_ALLOWS_SPLITTING, true);
     }
 
-    @Inject(method = "setChanneler", at = @At("TAIL"))
-    private void tempestra$preventChannelingSplits(ServerPlayerEntity channeler, CallbackInfo ci) {
-        if (channeler != null) {
+    @Inject(method = "setCause", at = @At("TAIL"))
+    private void tempestra$preventChannelingSplits(ServerPlayer cause, CallbackInfo ci) {
+        if (cause != null) {
             tempestra$setAllowsSplitting(false);
         }
     }
 
     @Inject(method = "tick", at = @At("HEAD"))
     private void tempestra$applySecondarySplitImpact(CallbackInfo ci) {
-        LightningEntity lightning = (LightningEntity) (Object) this;
-        if (tempestra$splitImpactApplied || lightning.getWorld().isClient) {
+        LightningBolt lightning = (LightningBolt) (Object) this;
+        if (tempestra$splitImpactApplied || lightning.level().isClientSide) {
             return;
         }
 
         tempestra$splitImpactApplied = true;
-        if (lightning.getWorld() instanceof ServerWorld world) {
+        if (lightning.level() instanceof ServerLevel world) {
             TempestraLightningSplitImpacts.tryApplySecondaryImpact(lightning, world);
         }
     }
 
     @Override
     public boolean tempestra$allowsSplitting() {
-        return ((LightningEntity) (Object) this).getDataTracker().get(TEMPESTRA_ALLOWS_SPLITTING);
+        return ((LightningBolt) (Object) this).getEntityData().get(TEMPESTRA_ALLOWS_SPLITTING);
     }
 
     @Override
     public void tempestra$setAllowsSplitting(boolean allowsSplitting) {
-        ((LightningEntity) (Object) this).getDataTracker().set(TEMPESTRA_ALLOWS_SPLITTING, allowsSplitting);
+        ((LightningBolt) (Object) this).getEntityData().set(TEMPESTRA_ALLOWS_SPLITTING, allowsSplitting);
     }
 }

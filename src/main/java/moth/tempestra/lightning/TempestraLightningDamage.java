@@ -1,9 +1,9 @@
 package moth.tempestra.lightning;
 
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.passive.IronGolemEntity;
-import net.minecraft.item.ItemStack;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.animal.IronGolem;
+import net.minecraft.world.item.ItemStack;
 
 public final class TempestraLightningDamage {
     public static final float BASE_DAMAGE = 20.0F;
@@ -19,7 +19,7 @@ public final class TempestraLightningDamage {
             damage *= 1.0F + countEquippedArmorPieces(livingEntity) * ARMOR_DAMAGE_BONUS_PER_PIECE;
         }
 
-        if (entity instanceof IronGolemEntity) {
+        if (entity instanceof IronGolem) {
             damage *= IRON_GOLEM_DAMAGE_MULTIPLIER;
         }
 
@@ -28,7 +28,7 @@ public final class TempestraLightningDamage {
 
     private static int countEquippedArmorPieces(LivingEntity entity) {
         int equippedPieces = 0;
-        for (ItemStack stack : entity.getArmorItems()) {
+        for (ItemStack stack : entity.getArmorSlots()) {
             if (!stack.isEmpty()) {
                 equippedPieces++;
             }

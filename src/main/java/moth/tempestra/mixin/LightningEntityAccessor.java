@@ -1,13 +1,13 @@
 package moth.tempestra.mixin;
 
-import net.minecraft.entity.LightningEntity;
+import net.minecraft.world.entity.LightningBolt;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.gen.Accessor;
 import org.spongepowered.asm.mixin.gen.Invoker;
 
-@Mixin(LightningEntity.class)
+@Mixin(LightningBolt.class)
 public interface LightningEntityAccessor {
-    @Accessor("cosmetic")
+    @Accessor("visualOnly")
     boolean tempestra$isCosmetic();
 
     @Invoker("spawnFire")

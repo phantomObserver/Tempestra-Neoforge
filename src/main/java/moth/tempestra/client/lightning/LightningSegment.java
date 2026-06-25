@@ -1,10 +1,10 @@
 package moth.tempestra.client.lightning;
 
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.phys.Vec3;
 
 public record LightningSegment(
-        Vec3d start,
-        Vec3d end,
+        Vec3 start,
+        Vec3 end,
         float startProgress,
         float endProgress,
         float localStartProgress,

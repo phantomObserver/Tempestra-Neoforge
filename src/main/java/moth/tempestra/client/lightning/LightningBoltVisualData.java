@@ -1,6 +1,6 @@
 package moth.tempestra.client.lightning;
 
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -9,8 +9,8 @@ import java.util.List;
 public final class LightningBoltVisualData {
     private final int entityId;
     private final long seed;
-    private final Vec3d origin;
-    private final Vec3d contact;
+    private final Vec3 origin;
+    private final Vec3 contact;
     private final List<LightningPath> paths;
     private final List<LightningImpactRay> impactRays;
     private final List<LightningSpark> sparks;
@@ -23,8 +23,8 @@ public final class LightningBoltVisualData {
     public LightningBoltVisualData(
             int entityId,
             long seed,
-            Vec3d origin,
-            Vec3d contact,
+            Vec3 origin,
+            Vec3 contact,
             List<LightningPath> paths,
             List<LightningImpactRay> impactRays,
             List<LightningSpark> sparks,
@@ -74,11 +74,11 @@ public final class LightningBoltVisualData {
         return seed;
     }
 
-    public Vec3d origin() {
+    public Vec3 origin() {
         return origin;
     }
 
-    public Vec3d contact() {
+    public Vec3 contact() {
         return contact;
     }
 

@@ -1,24 +1,34 @@
 package moth.tempestra;
 
-import moth.butterflyapi.ButterflyApi;
-import moth.butterflyapi.mod.ModContext;
-import moth.tempestra.server.TempestraServerGameplay;
-import net.fabricmc.api.ModInitializer;
-import net.minecraft.util.Identifier;
+import net.minecraft.resources.ResourceLocation;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.fml.common.Mod;
+import net.neoforged.neoforge.event.RegisterCommandsEvent;
 import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-public class TempestraMod implements ModInitializer {
+@Mod(TempestraMod.MOD_ID)
+public class TempestraMod {
     public static final String MOD_ID = "tempestra";
-    public static final ModContext MOD = ButterflyApi.mod(MOD_ID, "Tempestra");
-    public static final Logger LOGGER = MOD.logger();
+    public static final Logger LOGGER = LoggerFactory.getLogger("Tempestra");
 
-    @Override
-    public void onInitialize() {
+    public TempestraMod() {
         LOGGER.info("[Tempestra] Initializing Tempestra!");
-        TempestraServerGameplay.init();
     }
 
-    public static Identifier id(String path) {
-        return MOD.id(path);
+    @EventBusSubscriber(modid = MOD_ID)
+    public static final class Events {
+        private Events() {
+        }
+
+        @SubscribeEvent
+        public static void registerCommands(RegisterCommandsEvent event) {
+            moth.tempestra.weather.TempestraWeatherCommands.register(event.getDispatcher());
+        }
+    }
+
+    public static ResourceLocation id(String path) {
+        return ResourceLocation.fromNamespaceAndPath(MOD_ID, path);
     }
 }

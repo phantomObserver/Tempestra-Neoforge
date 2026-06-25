@@ -1,22 +1,22 @@
 package moth.tempestra.weather;
 
 import moth.tempestra.mixin.ServerWorldAccessor;
-import net.minecraft.entity.EntityType;
-import net.minecraft.entity.LightningEntity;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.ChunkPos;
-import net.minecraft.util.math.Vec3d;
-import net.minecraft.util.math.random.Random;
-import net.minecraft.world.World;
-import net.minecraft.world.chunk.WorldChunk;
+import net.minecraft.core.BlockPos;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.util.RandomSource;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.LightningBolt;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.phys.Vec3;
 
 public final class TempestraLightningFrequency {
     private TempestraLightningFrequency() {
     }
 
-    public static void tickExtraLightning(ServerWorld world, WorldChunk chunk) {
-        if (!world.getRegistryKey().equals(World.OVERWORLD)) {
+    public static void tickExtraLightning(ServerLevel world, LevelChunk chunk) {
+        if (world.dimension() != Level.OVERWORLD) {
             return;
         }
 
@@ -32,7 +32,7 @@ public final class TempestraLightningFrequency {
             return;
         }
 
-        Random random = world.getRandom();
+        RandomSource random = world.getRandom();
         int guaranteedExtraRolls = (int) extraMultiplier;
         for (int attempt = 0; attempt < guaranteedExtraRolls; attempt++) {
             trySpawnExtraLightning(world, chunk, random, TempestraWeatherSettings.BASE_LIGHTNING_CHANCE);
@@ -45,24 +45,25 @@ public final class TempestraLightningFrequency {
         }
     }
 
-    private static void trySpawnExtraLightning(ServerWorld world, WorldChunk chunk, Random random, int chance) {
+    private static void trySpawnExtraLightning(ServerLevel world, LevelChunk chunk, RandomSource random, int chance) {
         if (random.nextInt(chance) != 0) {
             return;
         }
 
         ChunkPos chunkPos = chunk.getPos();
-        BlockPos randomPos = world.getRandomPosInChunk(chunkPos.getStartX(), 0, chunkPos.getStartZ(), 15);
+        BlockPos randomPos = world.getBlockRandomPos(chunkPos.getMinBlockX(), 0, chunkPos.getMinBlockZ(), 15);
         BlockPos lightningPos = ((ServerWorldAccessor) world).tempestra$invokeGetLightningPos(randomPos);
-        if (!world.hasRain(lightningPos)) {
+        if (!world.isRainingAt(lightningPos)) {
             return;
         }
 
-        LightningEntity lightning = EntityType.LIGHTNING_BOLT.create(world);
+        LightningBolt lightning = EntityType.LIGHTNING_BOLT.create(world);
         if (lightning == null) {
             return;
         }
 
-        lightning.refreshPositionAfterTeleport(Vec3d.ofBottomCenter(lightningPos));
-        world.spawnEntity(lightning);
+        Vec3 position = Vec3.atBottomCenterOf(lightningPos);
+        lightning.moveTo(position.x, position.y, position.z, 0.0F, 0.0F);
+        world.addFreshEntity(lightning);
     }
 }

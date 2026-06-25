@@ -1,17 +1,17 @@
 package moth.tempestra.client.lightning;
 
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.phys.Vec3;
 
 public final class LightningSpark {
-    private Vec3d position;
-    private Vec3d previousPosition;
-    private Vec3d velocity;
+    private Vec3 position;
+    private Vec3 previousPosition;
+    private Vec3 velocity;
     private final int lifetimeTicks;
     private final float radius;
     private final int color;
     private int ageTicks;
 
-    public LightningSpark(Vec3d position, Vec3d velocity, int lifetimeTicks, float radius, int color) {
+    public LightningSpark(Vec3 position, Vec3 velocity, int lifetimeTicks, float radius, int color) {
         this.position = position;
         this.previousPosition = position;
         this.velocity = velocity;
@@ -23,7 +23,7 @@ public final class LightningSpark {
     public void tick() {
         previousPosition = position;
         position = position.add(velocity);
-        velocity = velocity.multiply(0.86D).add(0.0D, -0.006D, 0.0D);
+        velocity = velocity.scale(0.86D).add(0.0D, -0.006D, 0.0D);
         ageTicks++;
     }
 
@@ -31,11 +31,11 @@ public final class LightningSpark {
         return ageTicks >= lifetimeTicks;
     }
 
-    public Vec3d interpolatedPosition(float tickDelta) {
+    public Vec3 interpolatedPosition(float tickDelta) {
         return previousPosition.lerp(position, tickDelta);
     }
 
-    public Vec3d velocity() {
+    public Vec3 velocity() {
         return velocity;
     }
 

@@ -2,15 +2,17 @@ package moth.tempestra.client.lightning;
 
 import moth.butterflyapi.math.Basis3;
 import moth.butterflyapi.math.Vecs;
-import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderContext;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.render.RenderLayer;
-import net.minecraft.client.render.VertexConsumer;
-import net.minecraft.client.util.math.MatrixStack;
-import net.minecraft.client.world.ClientWorld;
-import net.minecraft.entity.LightningEntity;
-import net.minecraft.util.math.MathHelper;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.client.Camera;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.MultiBufferSource;
+import net.minecraft.client.renderer.RenderType;
+import com.mojang.blaze3d.vertex.VertexConsumer;
+import com.mojang.blaze3d.vertex.PoseStack;
+import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.world.entity.LightningBolt;
+import net.minecraft.util.Mth;
+import net.minecraft.world.phys.Vec3;
+import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
 import org.joml.Matrix4f;
 
 import java.util.Iterator;
@@ -23,8 +25,8 @@ public final class ClientLightningVisualManager {
     private ClientLightningVisualManager() {
     }
 
-    public static void ensureVisual(LightningEntity entity) {
-        if (!TempestraLightningVisuals.CUSTOM_VISUALS_ENABLED || !(entity.getWorld() instanceof ClientWorld world)) {
+    public static void ensureVisual(LightningBolt entity) {
+        if (!TempestraLightningVisuals.CUSTOM_VISUALS_ENABLED || !(entity.level() instanceof ClientLevel world)) {
             return;
         }
 
@@ -33,11 +35,11 @@ public final class ClientLightningVisualManager {
             data = LightningShapeGenerator.generate(entity, world);
             ACTIVE_BOLTS.put(entity.getId(), data);
         }
-        data.markSeen(world.getTime());
+        data.markSeen(world.getGameTime());
     }
 
-    public static void tick(MinecraftClient client) {
-        if (client.world == null) {
+    public static void tick(Minecraft client) {
+        if (client.level == null) {
             clear();
             return;
         }
@@ -52,32 +54,36 @@ public final class ClientLightningVisualManager {
         }
     }
 
-    public static void render(WorldRenderContext context) {
-        if (ACTIVE_BOLTS.isEmpty() || context.matrixStack() == null || context.consumers() == null) {
+    public static void render(RenderLevelStageEvent event) {
+        if (ACTIVE_BOLTS.isEmpty() || event.getStage() != RenderLevelStageEvent.Stage.AFTER_TRANSLUCENT_BLOCKS) {
             return;
         }
 
-        MatrixStack matrices = context.matrixStack();
-        Vec3d cameraPos = context.camera().getPos();
-        matrices.push();
+        PoseStack matrices = event.getPoseStack();
+        Camera camera = event.getCamera();
+        Vec3 cameraPos = camera.getPosition();
+        matrices.pushPose();
         matrices.translate(-cameraPos.x, -cameraPos.y, -cameraPos.z);
 
-        Matrix4f positionMatrix = matrices.peek().getPositionMatrix();
-        VertexConsumer consumer = context.consumers().getBuffer(RenderLayer.getLightning());
+        Matrix4f positionMatrix = matrices.last().pose();
+        MultiBufferSource.BufferSource buffers = Minecraft.getInstance().renderBuffers().bufferSource();
+        VertexConsumer consumer = buffers.getBuffer(RenderType.lightning());
+        float tickDelta = event.getPartialTick().getGameTimeDeltaTicks();
         for (LightningBoltVisualData data : ACTIVE_BOLTS.values()) {
-            renderBolt(positionMatrix, consumer, data, context.tickDelta(), cameraPos);
-            renderImpact(positionMatrix, consumer, data, context.tickDelta());
-            renderSparks(positionMatrix, consumer, data, context.tickDelta());
+            renderBolt(positionMatrix, consumer, data, tickDelta, cameraPos);
+            renderImpact(positionMatrix, consumer, data, tickDelta);
+            renderSparks(positionMatrix, consumer, data, tickDelta);
         }
+        buffers.endBatch(RenderType.lightning());
 
-        matrices.pop();
+        matrices.popPose();
     }
 
     public static void clear() {
         ACTIVE_BOLTS.clear();
     }
 
-    private static void renderBolt(Matrix4f positionMatrix, VertexConsumer consumer, LightningBoltVisualData data, float tickDelta, Vec3d cameraPos) {
+    private static void renderBolt(Matrix4f positionMatrix, VertexConsumer consumer, LightningBoltVisualData data, float tickDelta, Vec3 cameraPos) {
         float lifetimeFade = 1.0F - smoothstep(0.58F, 1.0F, data.lifetimeProgress(tickDelta));
         float strikeFlash = 0.72F + flicker(data.seed(), data.renderAge(tickDelta), 0.0F) * 0.34F;
         for (LightningPath path : data.paths()) {
@@ -166,9 +172,9 @@ public final class ClientLightningVisualManager {
         }
 
         for (LightningImpactRay ray : data.impactRays()) {
-            Vec3d contact = ray.contact().add(0.0D, 0.08D, 0.0D);
+            Vec3 contact = ray.contact().add(0.0D, 0.08D, 0.0D);
             float rayFlicker = 0.52F + flicker(ray.flickerSeed(), age, 3.0F) * 0.58F;
-            Vec3d end = contact.add(ray.offset().multiply(0.55D + progress * 0.55D));
+            Vec3 end = contact.add(ray.offset().scale(0.55D + progress * 0.55D));
             LightningSegment segment = new LightningSegment(contact, end, 1.0F, 1.0F, 0.0F, 1.0F, 1.0F, 1.0F, ray.flickerSeed());
             renderSegmentPass(
                     positionMatrix,
@@ -200,8 +206,8 @@ public final class ClientLightningVisualManager {
             if (alphaScale <= 0.01F) {
                 continue;
             }
-            Vec3d current = spark.interpolatedPosition(tickDelta);
-            Vec3d tail = current.subtract(spark.velocity().multiply(1.85D));
+            Vec3 current = spark.interpolatedPosition(tickDelta);
+            Vec3 tail = current.subtract(spark.velocity().scale(1.85D));
             LightningSegment segment = new LightningSegment(tail, current, 0.0F, 0.0F, 0.0F, 1.0F, 1.0F, 1.0F, data.seed());
             float headRadius = spark.radius() * (1.0F - progress * 0.55F);
             renderSegmentPass(positionMatrix, consumer, segment, headRadius * 0.42F, headRadius, spark.color(), Math.round(74.0F * alphaScale), Math.round(218.0F * alphaScale));
@@ -232,8 +238,8 @@ public final class ClientLightningVisualManager {
                 red(color),
                 green(color),
                 blue(color),
-                MathHelper.clamp(startAlpha, 0, 255),
-                MathHelper.clamp(gradientAlpha ? endAlpha : Math.round(endAlpha * 0.88F), 0, 255),
+                Mth.clamp(startAlpha, 0, 255),
+                Mth.clamp(gradientAlpha ? endAlpha : Math.round(endAlpha * 0.88F), 0, 255),
                 TempestraLightningVisuals.TUBE_SIDES
         );
     }
@@ -241,8 +247,8 @@ public final class ClientLightningVisualManager {
     private static void emitTubeSegment(
             Matrix4f positionMatrix,
             VertexConsumer consumer,
-            Vec3d start,
-            Vec3d end,
+            Vec3 start,
+            Vec3 end,
             float startRadius,
             float endRadius,
             int red,
@@ -252,7 +258,7 @@ public final class ClientLightningVisualManager {
             int endAlpha,
             int sides
     ) {
-        Vec3d axis = end.subtract(start);
+        Vec3 axis = end.subtract(start);
         if (Vecs.lengthSquared(axis) < 1.0E-6D) {
             return;
         }
@@ -261,10 +267,10 @@ public final class ClientLightningVisualManager {
         for (int side = 0; side < sides; side++) {
             double startAngle = (Math.PI * 2.0D * side) / sides;
             double endAngle = (Math.PI * 2.0D * (side + 1)) / sides;
-            Vec3d startOffsetA = basis.radial(startAngle, startRadius);
-            Vec3d startOffsetB = basis.radial(endAngle, startRadius);
-            Vec3d endOffsetA = basis.radial(startAngle, endRadius);
-            Vec3d endOffsetB = basis.radial(endAngle, endRadius);
+            Vec3 startOffsetA = basis.radial(startAngle, startRadius);
+            Vec3 startOffsetB = basis.radial(endAngle, startRadius);
+            Vec3 endOffsetA = basis.radial(startAngle, endRadius);
+            Vec3 endOffsetB = basis.radial(endAngle, endRadius);
             emitQuad(
                     positionMatrix,
                     consumer,
@@ -297,20 +303,20 @@ public final class ClientLightningVisualManager {
     private static void emitQuad(
             Matrix4f positionMatrix,
             VertexConsumer consumer,
-            Vec3d first,
-            Vec3d second,
-            Vec3d third,
-            Vec3d fourth,
+            Vec3 first,
+            Vec3 second,
+            Vec3 third,
+            Vec3 fourth,
             int red,
             int green,
             int blue,
             int startAlpha,
             int endAlpha
     ) {
-        consumer.vertex(positionMatrix, (float) first.x, (float) first.y, (float) first.z).color(red, green, blue, startAlpha).next();
-        consumer.vertex(positionMatrix, (float) second.x, (float) second.y, (float) second.z).color(red, green, blue, startAlpha).next();
-        consumer.vertex(positionMatrix, (float) third.x, (float) third.y, (float) third.z).color(red, green, blue, endAlpha).next();
-        consumer.vertex(positionMatrix, (float) fourth.x, (float) fourth.y, (float) fourth.z).color(red, green, blue, endAlpha).next();
+        consumer.addVertex(positionMatrix, (float) first.x, (float) first.y, (float) first.z).setColor(red, green, blue, startAlpha);
+        consumer.addVertex(positionMatrix, (float) second.x, (float) second.y, (float) second.z).setColor(red, green, blue, startAlpha);
+        consumer.addVertex(positionMatrix, (float) third.x, (float) third.y, (float) third.z).setColor(red, green, blue, endAlpha);
+        consumer.addVertex(positionMatrix, (float) fourth.x, (float) fourth.y, (float) fourth.z).setColor(red, green, blue, endAlpha);
     }
 
     private static float segmentFlicker(LightningPathType type, LightningSegment segment, float age) {
@@ -356,8 +362,8 @@ public final class ClientLightningVisualManager {
         };
     }
 
-    private static float distanceReadability(Vec3d cameraPos, LightningSegment segment) {
-        Vec3d midpoint = segment.start().add(segment.end()).multiply(0.5D);
+    private static float distanceReadability(Vec3 cameraPos, LightningSegment segment) {
+        Vec3 midpoint = segment.start().add(segment.end()).scale(0.5D);
         float distance = (float) cameraPos.distanceTo(midpoint);
         return smoothstep(
                 TempestraLightningVisuals.DISTANT_READABILITY_START,
@@ -390,7 +396,7 @@ public final class ClientLightningVisualManager {
     }
 
     private static float smoothstep(float edge0, float edge1, float value) {
-        float t = MathHelper.clamp((value - edge0) / (edge1 - edge0), 0.0F, 1.0F);
+        float t = Mth.clamp((value - edge0) / (edge1 - edge0), 0.0F, 1.0F);
         return t * t * (3.0F - 2.0F * t);
     }
 

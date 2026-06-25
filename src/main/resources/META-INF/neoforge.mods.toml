@@ -1,0 +1,27 @@
+modLoader="javafml"
+loaderVersion="[4,)"
+license="CC-BY-SA 4.0"
+
+[[mods]]
+modId="tempestra"
+version="${mod_version}"
+displayName="Tempestra"
+authors="Moth"
+description='''A lightning and thunderstorm visual overhaul focused on dramatic custom lightning.'''
+
+[[mixins]]
+config="tempestra.mixins.json"
+
+[[dependencies.tempestra]]
+modId="neoforge"
+type="required"
+versionRange="[21.1,)"
+ordering="NONE"
+side="BOTH"
+
+[[dependencies.tempestra]]
+modId="minecraft"
+type="required"
+versionRange="[1.21.1]"
+ordering="NONE"
+side="BOTH"

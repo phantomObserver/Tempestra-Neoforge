@@ -1,12 +1,12 @@
 package moth.tempestra.mixin;
 
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.math.BlockPos;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.core.BlockPos;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.gen.Invoker;
 
-@Mixin(ServerWorld.class)
+@Mixin(ServerLevel.class)
 public interface ServerWorldAccessor {
-    @Invoker("getLightningPos")
+    @Invoker("findLightningTargetAround")
     BlockPos tempestra$invokeGetLightningPos(BlockPos pos);
 }
