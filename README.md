@@ -12,5 +12,8 @@ This mod replaces the normal vanilla lightning visual with thinner, more natural
 
 **Tempestra** is officially published on Modrinth.
 
-**Download Tempestra here:**  
+**Download Tempestra (Fabric 1.20.1) here:**  
 https://modrinth.com/mod/tempestra
+
+**Download Temprestra Reforged (Neoforge 1.21.1) here:**
+https://modrinth.com/mod/tempestra-reforged
